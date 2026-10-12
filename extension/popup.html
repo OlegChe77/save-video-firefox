@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <div class="logo"><img src="icons/icon.svg" alt=""></div>
+    <h1>Сохрани видео</h1>
+    <button id="settings-btn" class="icon-btn" title="Настройки">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </header>
+
+  <div id="settings" class="settings" hidden>
+    <label class="switch-row">
+      <span>Спрашивать, куда сохранить файл</span>
+      <input type="checkbox" id="save-as"><i class="switch"></i>
+    </label>
+    <p class="muted small">Иначе файлы сохраняются в папку «Загрузки/YouTube».</p>
+  </div>
+
+  <main id="video" hidden>
+    <div class="thumb">
+      <img id="thumb" alt="">
+      <span id="duration" class="badge"></span>
+      <div class="thumb-text">
+        <p id="title"></p>
+        <p id="author"></p>
+      </div>
+    </div>
+
+    <div id="loading" class="skeleton-grid">
+      <div></div><div></div><div></div><div></div>
+    </div>
+    <p id="info-error" class="error" hidden></p>
+
+    <div id="options-wrap" hidden>
+      <div class="section-head"><span>Качество</span></div>
+      <div id="options" class="options"></div>
+
+      <label class="switch-row clip-row">
+        <span class="with-icon" data-icon="scissors">Только отрывок</span>
+        <input type="checkbox" id="clip-on"><i class="switch"></i>
+      </label>
+      <div id="clip" class="clip" hidden>
+        <div class="time">
+          <span>Начало</span>
+          <input id="clip-from" spellcheck="false">
+          <button class="icon-btn small-btn" data-now="clip-from" title="Текущее время видео" data-icon="pin"></button>
+        </div>
+        <div class="time">
+          <span>Конец</span>
+          <input id="clip-to" spellcheck="false">
+          <button class="icon-btn small-btn" data-now="clip-to" title="Текущее время видео" data-icon="pin"></button>
+        </div>
+      </div>
+
+      <button id="download" class="primary">
+        <span class="with-icon" data-icon="download">Скачать</span>
+        <small id="download-meta"></small>
+      </button>
+
+      <div class="tools">
+        <button id="frame" class="tool"><span class="with-icon" data-icon="camera">Кадр</span></button>
+        <button id="cover" class="tool"><span class="with-icon" data-icon="image">Обложка</span></button>
+      </div>
+    </div>
+  </main>
+
+  <div id="empty" class="empty" hidden>
+    <div class="empty-art"><img src="icons/icon.svg" alt=""></div>
+    <p><b>Откройте видео на YouTube</b></p>
+    <p class="muted">Здесь появятся качество, размер файла и кнопка «Скачать».</p>
+  </div>
+
+  <section id="jobs-wrap" hidden>
+    <div class="section-head">
+      <span>Загрузки</span>
+      <button id="clear" class="link">Очистить</button>
+    </div>
+    <ul id="jobs"></ul>
+  </section>
+
+  <script src="common.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

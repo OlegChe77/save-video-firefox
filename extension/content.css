@@ -1,0 +1,172 @@
+#ytdl-bar {
+  --ytdl-accent: #ff3b30;
+  --ytdl-accent2: #ff6a3d;
+  --ytdl-fg: #0f0f0f;
+  --ytdl-muted: #606060;
+  --ytdl-soft: rgba(0, 0, 0, 0.05);
+  --ytdl-soft2: rgba(0, 0, 0, 0.1);
+  --ytdl-menu: #fff;
+  --ytdl-line: rgba(0, 0, 0, 0.1);
+  --ytdl-ok: #1f9d55;
+  margin: 12px 0 2px;
+  font: 500 14px/1.2 "Roboto", "Arial", sans-serif;
+  color: var(--ytdl-fg);
+}
+html[dark] #ytdl-bar {
+  --ytdl-fg: #f1f1f1;
+  --ytdl-muted: #aaa;
+  --ytdl-soft: rgba(255, 255, 255, 0.1);
+  --ytdl-soft2: rgba(255, 255, 255, 0.2);
+  --ytdl-menu: #282828;
+  --ytdl-line: rgba(255, 255, 255, 0.12);
+  --ytdl-ok: #3ecf7a;
+}
+#ytdl-bar svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+#ytdl-bar button { font: inherit; color: inherit; cursor: pointer; border: 0; }
+#ytdl-bar button:disabled { opacity: 0.45; cursor: default; }
+#ytdl-bar [hidden] { display: none !important; }
+
+#ytdl-bar .ytdl-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+
+/* split download button */
+#ytdl-bar .ytdl-split { position: relative; display: flex; }
+#ytdl-bar .ytdl-main,
+#ytdl-bar .ytdl-caret {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--ytdl-accent), var(--ytdl-accent2));
+  box-shadow: 0 2px 10px rgba(255, 59, 48, 0.35);
+  transition: filter 0.15s, transform 0.1s;
+}
+#ytdl-bar .ytdl-main { padding: 0 12px 0 12px; border-radius: 18px 0 0 18px; }
+#ytdl-bar .ytdl-caret { padding: 0 10px 0 8px; border-radius: 0 18px 18px 0; border-left: 1px solid rgba(255, 255, 255, 0.3); }
+#ytdl-bar .ytdl-main:hover, #ytdl-bar .ytdl-caret:hover { filter: brightness(1.08); }
+#ytdl-bar .ytdl-main:active, #ytdl-bar .ytdl-caret:active { transform: translateY(1px); }
+#ytdl-bar .ytdl-q {
+  font-weight: 500;
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.22);
+  white-space: nowrap;
+}
+
+/* quality menu */
+#ytdl-bar .ytdl-menu {
+  position: absolute;
+  top: 44px;
+  left: 0;
+  z-index: 2100;
+  min-width: 260px;
+  padding: 8px;
+  border-radius: 14px;
+  background: var(--ytdl-menu);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28), 0 0 0 1px var(--ytdl-line);
+  animation: ytdl-pop 0.14s ease-out;
+}
+@keyframes ytdl-pop { from { opacity: 0; transform: translateY(-4px) scale(0.98); } }
+#ytdl-bar .ytdl-menu-head { padding: 6px 10px 8px; font-size: 12px; color: var(--ytdl-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+#ytdl-bar .ytdl-menu-empty { padding: 10px; color: var(--ytdl-muted); }
+#ytdl-bar .ytdl-menu-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 22px auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  background: none;
+  text-align: left;
+}
+#ytdl-bar .ytdl-menu-item:hover { background: var(--ytdl-soft); }
+#ytdl-bar .ytdl-menu-item b { font-weight: 600; }
+#ytdl-bar .ytdl-menu-item i { font-style: normal; font-size: 11px; color: var(--ytdl-muted); }
+#ytdl-bar .ytdl-menu-item i.ytdl-hd { color: var(--ytdl-accent); font-weight: 700; }
+#ytdl-bar .ytdl-menu-item small { font-size: 12px; color: var(--ytdl-muted); }
+#ytdl-bar .ytdl-check { visibility: hidden; color: var(--ytdl-accent); display: flex; }
+#ytdl-bar .ytdl-check svg { width: 18px; height: 18px; stroke-width: 2.6; }
+#ytdl-bar .ytdl-sel .ytdl-check { visibility: visible; }
+
+/* secondary buttons */
+#ytdl-bar .ytdl-ghost {
+  height: 36px;
+  padding: 0 14px 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 18px;
+  background: var(--ytdl-soft);
+  transition: background 0.15s;
+}
+#ytdl-bar .ytdl-ghost:hover { background: var(--ytdl-soft2); }
+#ytdl-bar .ytdl-ghost.ytdl-on { background: var(--ytdl-fg); color: var(--ytdl-menu); }
+#ytdl-bar .ytdl-flash { color: var(--ytdl-ok); }
+#ytdl-bar .ytdl-flash-bad { color: var(--ytdl-accent); }
+#ytdl-bar .ytdl-icon {
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: none;
+  color: var(--ytdl-muted);
+}
+#ytdl-bar .ytdl-icon:hover { background: var(--ytdl-soft); color: var(--ytdl-fg); }
+#ytdl-bar .ytdl-icon svg { width: 18px; height: 18px; }
+
+/* job progress */
+#ytdl-bar .ytdl-job { display: flex; align-items: center; gap: 8px; min-width: 0; padding-left: 4px; color: var(--ytdl-muted); font-size: 13px; font-weight: 400; }
+#ytdl-bar .ytdl-ring { width: 24px; height: 24px; transform: rotate(-90deg); stroke-width: 3.5; }
+#ytdl-bar .ytdl-ring circle { fill: none; stroke: var(--ytdl-soft2); }
+#ytdl-bar .ytdl-ring .ytdl-ring-fill { stroke: var(--ytdl-accent); stroke-dasharray: 94.25; stroke-dashoffset: 94.25; transition: stroke-dashoffset 0.3s; }
+#ytdl-bar .ytdl-indeterminate .ytdl-ring { animation: ytdl-spin 0.9s linear infinite; }
+#ytdl-bar .ytdl-indeterminate .ytdl-ring-fill { stroke-dashoffset: 66 !important; }
+@keyframes ytdl-spin { to { transform: rotate(270deg); } }
+#ytdl-bar .ytdl-job[data-state="done"] { color: var(--ytdl-ok); }
+#ytdl-bar .ytdl-job[data-state="done"] .ytdl-ring-fill { stroke: var(--ytdl-ok); }
+#ytdl-bar .ytdl-job[data-state="error"] { color: var(--ytdl-accent); }
+#ytdl-bar .ytdl-job-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* clip panel */
+#ytdl-bar .ytdl-clip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--ytdl-soft);
+  animation: ytdl-pop 0.14s ease-out;
+}
+#ytdl-bar .ytdl-clip label { display: inline-flex; align-items: center; gap: 8px; color: var(--ytdl-muted); font-weight: 400; }
+#ytdl-bar .ytdl-clip input {
+  width: 74px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--ytdl-line);
+  border-radius: 8px;
+  background: var(--ytdl-menu);
+  color: var(--ytdl-fg);
+  font: 500 14px "Roboto Mono", "Consolas", monospace;
+  text-align: center;
+}
+#ytdl-bar .ytdl-clip input:focus { outline: 2px solid var(--ytdl-accent); outline-offset: -1px; }
+#ytdl-bar .ytdl-dash { width: 10px; height: 2px; margin: 0 4px; background: var(--ytdl-muted); border-radius: 1px; }
+#ytdl-bar .ytdl-clip-len { margin: 0 6px; color: var(--ytdl-muted); font: 500 13px "Roboto Mono", "Consolas", monospace; }
+#ytdl-bar .ytdl-clip-len.ytdl-bad { color: var(--ytdl-accent); font-family: inherit; }
+#ytdl-bar .ytdl-clip-go {
+  margin-left: auto;
+  height: 32px;
+  padding: 0 14px 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 16px;
+  color: #fff !important;
+  background: linear-gradient(135deg, var(--ytdl-accent), var(--ytdl-accent2));
+}
+#ytdl-bar .ytdl-clip-go svg { width: 18px; height: 18px; }
