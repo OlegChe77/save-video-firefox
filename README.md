@@ -10,6 +10,10 @@
 </p>
 
 <p align="center">
+  <b>Русский</b> · <a href="README.en.md">English</a>
+</p>
+
+<p align="center">
   <a href="https://addons.mozilla.org/ru/firefox/addon/ytdl-4k-clips-frames/"><b>Установить из каталога Firefox →</b></a>
 </p>
 
