@@ -229,7 +229,9 @@ function render() {
   const ring = box.querySelector(".ytdl-ring-fill");
   ring.style.strokeDashoffset = String(94.25 * (1 - pct / 100));
   box.classList.toggle("ytdl-indeterminate", job.status === "running" && job.phase !== "download");
-  box.querySelector(".ytdl-job-text").textContent = jobStatus(job);
+  const text = box.querySelector(".ytdl-job-text");
+  text.textContent = jobStatus(job);
+  text.title = job.status === "error" ? text.textContent : ""; // long errors are cut off in the bar
   const act = box.querySelector(".ytdl-job-act");
   if (job.status === "running") {
     act.replaceChildren(icon("close"));

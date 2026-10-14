@@ -54,6 +54,10 @@ const YT = (() => {
     const ps = r.playabilityStatus || {};
     if (ps.status !== "OK") {
       if (ps.status === "LOGIN_REQUIRED") visitor = null;
+      // YouTube's anti-bot check (common behind VPNs): explain what helps
+      if (ps.status === "LOGIN_REQUIRED" && /бот|bot/i.test(ps.reason || "")) {
+        throw new Error("YouTube просит подтвердить, что вы не бот. Обычно это из-за VPN: смените сервер VPN или отключите VPN для youtube.com, подождите пару минут и попробуйте снова.");
+      }
       throw new Error(ps.reason || "Видео недоступно");
     }
     const d = r.videoDetails || {};

@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Сохрани видео",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Скачивание видео с YouTube до 4K со звуком, отрывков, кадров и обложек. Работает без сторонних программ.",
   "browser_specific_settings": {
     "gecko": {
