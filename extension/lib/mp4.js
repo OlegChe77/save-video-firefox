@@ -37,12 +37,56 @@ const MP4 = (() => {
     return Number(dv.getBigUint64(p));
   }
 
+  // Reads bytes [a, b) of a Blob through a cached window, so walking many
+  // small headers doesn't turn into a disk read for each of them.
+  function reader(blob, win = 1 << 20) {
+    let start = 0, buf = new Uint8Array(0);
+    return async (a, b) => {
+      b = Math.min(b, blob.size);
+      if (a < start || b > start + buf.length) {
+        start = a;
+        buf = new Uint8Array(await blob.slice(a, Math.min(blob.size, Math.max(b, a + win))).arrayBuffer());
+      }
+      return buf.subarray(a - start, b - start);
+    };
+  }
+
+  // Top-level boxes of a stream kept in a Blob. moov and moof are read into
+  // memory; mdat (the media itself) stays where it is.
+  async function scan(blob) {
+    const read = reader(blob, 16 * 1024); // a moof and the next box header usually fit
+    const out = [];
+    let p = 0;
+    while (p + 8 <= blob.size) {
+      const head = await read(p, p + 16);
+      const dv = dvOf(head);
+      let size = dv.getUint32(0);
+      const type = String.fromCharCode(head[4], head[5], head[6], head[7]);
+      let header = 8;
+      if (size === 1) {
+        if (head.length < 16) break;
+        size = u64(dv, 8);
+        header = 16;
+      } else if (size === 0) {
+        size = blob.size - p;
+      }
+      if (size < header || p + size > blob.size) break; // truncated tail
+      const box = { type, start: p, end: p + size };
+      if (type === "moov" || type === "moof") box.u8 = (await read(p, p + size)).slice();
+      out.push(box);
+      p += size;
+    }
+    return out;
+  }
+
   // Parses init segment (ftyp+moov) and all moof/mdat fragments of one stream.
-  function parseTrack(u8) {
+  async function readTrack(blob) {
+    const top = await scan(blob);
+    const moovBox = top.find((b) => b.type === "moov");
+    if (!moovBox) throw new Error("moov not found");
+    const u8 = moovBox.u8;
     const dv = dvOf(u8);
-    const top = boxes(u8);
-    const moov = top.find((b) => b.type === "moov");
-    if (!moov) throw new Error("moov not found");
+    const moov = boxes(u8)[0];
     const trak = child(u8, moov, "trak");
     const tkhd = child(u8, trak, "tkhd");
     const mdia = child(u8, trak, "mdia");
@@ -83,41 +127,43 @@ const MP4 = (() => {
 
     const samples = [];
     let frag = 0;
-    for (const moof of top) {
-      if (moof.type !== "moof") continue;
-      for (const traf of children(u8, moof, "traf")) {
-        const tfhd = child(u8, traf, "tfhd");
-        const tf = dv.getUint32(tfhd.body) & 0xffffff;
+    for (const m of top) {
+      if (m.type !== "moof") continue;
+      const mu = m.u8;
+      const mdv = dvOf(mu);
+      for (const traf of children(mu, boxes(mu)[0], "traf")) {
+        const tfhd = child(mu, traf, "tfhd");
+        const tf = mdv.getUint32(tfhd.body) & 0xffffff;
         let p = tfhd.body + 8;
-        let base = moof.start;
-        if (tf & 0x1) { base = u64(dv, p); p += 8; }
+        let base = m.start;
+        if (tf & 0x1) { base = u64(mdv, p); p += 8; }
         if (tf & 0x2) p += 4;
-        const defDur = tf & 0x8 ? dv.getUint32((p += 4) - 4) : trex.dur;
-        const defSize = tf & 0x10 ? dv.getUint32((p += 4) - 4) : trex.size;
-        const defFlags = tf & 0x20 ? dv.getUint32((p += 4) - 4) : trex.flags;
+        const defDur = tf & 0x8 ? mdv.getUint32((p += 4) - 4) : trex.dur;
+        const defSize = tf & 0x10 ? mdv.getUint32((p += 4) - 4) : trex.size;
+        const defFlags = tf & 0x20 ? mdv.getUint32((p += 4) - 4) : trex.flags;
 
-        const tfdt = child(u8, traf, "tfdt");
+        const tfdt = child(mu, traf, "tfdt");
         let dts = 0;
-        if (tfdt) dts = u8[tfdt.body] === 1 ? u64(dv, tfdt.body + 4) : dv.getUint32(tfdt.body + 4);
+        if (tfdt) dts = mu[tfdt.body] === 1 ? u64(mdv, tfdt.body + 4) : mdv.getUint32(tfdt.body + 4);
 
         let dataPos = base;
-        for (const trun of children(u8, traf, "trun")) {
-          const ver = u8[trun.body];
-          const rf = dv.getUint32(trun.body) & 0xffffff;
-          const count = dv.getUint32(trun.body + 4);
+        for (const trun of children(mu, traf, "trun")) {
+          const ver = mu[trun.body];
+          const rf = mdv.getUint32(trun.body) & 0xffffff;
+          const count = mdv.getUint32(trun.body + 4);
           let q = trun.body + 8;
-          if (rf & 0x1) { dataPos = base + dv.getInt32(q); q += 4; }
+          if (rf & 0x1) { dataPos = base + mdv.getInt32(q); q += 4; }
           let firstFlags = null;
-          if (rf & 0x4) { firstFlags = dv.getUint32(q); q += 4; }
+          if (rf & 0x4) { firstFlags = mdv.getUint32(q); q += 4; }
           frag++;
           for (let i = 0; i < count; i++) {
             let dur = defDur, size = defSize, flags = defFlags, cto = 0;
-            if (rf & 0x100) { dur = dv.getUint32(q); q += 4; }
-            if (rf & 0x200) { size = dv.getUint32(q); q += 4; }
-            if (rf & 0x400) { flags = dv.getUint32(q); q += 4; }
+            if (rf & 0x100) { dur = mdv.getUint32(q); q += 4; }
+            if (rf & 0x200) { size = mdv.getUint32(q); q += 4; }
+            if (rf & 0x400) { flags = mdv.getUint32(q); q += 4; }
             else if (i === 0 && firstFlags !== null) flags = firstFlags;
-            if (rf & 0x800) { cto = ver === 0 ? dv.getUint32(q) : dv.getInt32(q); q += 4; }
-            if (dataPos + size > u8.length) break; // incomplete download tail
+            if (rf & 0x800) { cto = ver === 0 ? mdv.getUint32(q) : mdv.getInt32(q); q += 4; }
+            if (dataPos + size > blob.size) break; // incomplete download tail
             samples.push({ dts, dur, size, cto, sync: !((flags >> 16) & 1), offset: dataPos, frag });
             dts += dur;
             dataPos += size;
@@ -127,7 +173,7 @@ const MP4 = (() => {
     }
 
     return {
-      data: u8,
+      data: blob,
       kind: handler === "vide" ? "video" : "audio",
       handler,
       timescale,
@@ -326,21 +372,31 @@ const MP4 = (() => {
     return box("stbl", ...parts);
   }
 
+  // One piece per fragment, copied as a whole. Inside it, each run of samples
+  // stored back to back is an MP4 chunk; WebM has block headers between frames,
+  // so there every frame is a chunk and the headers stay as unused bytes.
   function chunksOf(t, index) {
     const out = [];
-    let cur = null;
+    let cur = null, run = null;
     for (const x of t.samples) {
       if (!cur || cur.frag !== x.frag) {
-        cur = { track: index, frag: x.frag, time: x.dts / t.timescale, offset: x.offset, size: 0, count: 0 };
+        cur = { track: index, frag: x.frag, time: x.dts / t.timescale, start: x.offset, end: x.offset, runs: [] };
         out.push(cur);
+        run = null;
       }
-      cur.size += x.size;
-      cur.count++;
+      if (!run || x.offset !== run.offset + run.size) {
+        run = { offset: x.offset, size: 0, count: 0 };
+        cur.runs.push(run);
+      }
+      run.size += x.size;
+      run.count++;
+      cur.end = x.offset + x.size;
     }
     return out;
   }
 
-  // Builds a regular MP4. Returns an array of parts suitable for `new Blob(parts)`.
+  // Builds a regular MP4. Returns an array of parts suitable for `new Blob(parts)`;
+  // the media parts are slices of the source Blobs, so nothing is copied.
   function build(tracks) {
     tracks = tracks.filter((t) => t.samples.length);
     if (!tracks.length) throw new Error("no samples");
@@ -352,6 +408,7 @@ const MP4 = (() => {
     }
 
     const perTrack = tracks.map(chunksOf);
+    const runs = perTrack.map((pieces) => pieces.flatMap((p) => p.runs));
     const order = perTrack.flat().sort((a, b) => a.time - b.time || a.track - b.track);
 
     const isVideo = tracks.some((t) => t.kind === "video");
@@ -378,19 +435,19 @@ const MP4 = (() => {
             tkhd(i + 1, msDur, t),
             ...edit,
             box("mdia", mdhd(t, durations[i]), t.hdlr,
-              box("minf", t.mediaHeader, t.dinf, stbl(t, perTrack[i], offsets[i])))
+              box("minf", t.mediaHeader, t.dinf, stbl(t, runs[i], offsets[i])))
           );
         })
       );
 
     // moov size does not depend on offset values (co64 is fixed width).
-    const dummy = tracks.map((_, i) => perTrack[i].map(() => 0));
+    const dummy = runs.map((r) => r.map(() => 0));
     const moovSize = makeMoov(dummy).length;
     let pos = ftyp.length + moovSize + 16;
     const offsets = tracks.map(() => []);
     for (const c of order) {
-      offsets[c.track].push(pos);
-      pos += c.size;
+      for (const r of c.runs) offsets[c.track].push(pos + r.offset - c.start);
+      pos += c.end - c.start;
     }
     const mdatSize = pos - ftyp.length - moovSize;
     const mdatHead = new Uint8Array(16);
@@ -400,11 +457,11 @@ const MP4 = (() => {
     hv.setBigUint64(8, BigInt(mdatSize));
 
     const parts = [ftyp, makeMoov(offsets), mdatHead];
-    for (const c of order) parts.push(tracks[c.track].data.subarray(c.offset, c.offset + c.size));
+    for (const c of order) parts.push(tracks[c.track].data.slice(c.start, c.end));
     return parts;
   }
 
-  return { parseTrack, parseSidx, trim, build, boxes };
+  return { readTrack, parseSidx, trim, build, boxes, box, reader };
 })();
 
 if (typeof module !== "undefined") module.exports = MP4;

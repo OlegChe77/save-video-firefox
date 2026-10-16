@@ -49,6 +49,17 @@ const YT = (() => {
   }
 
   const codecOf = (f) => (f.mimeType.match(/codecs="([^".]+)/) || [])[1];
+  // HDR looks washed out on ordinary screens; YouTube always has SDR versions too.
+  const isHdr = (f) => {
+    const c = ((f.mimeType.match(/codecs="([^"]+)/) || [])[1] || "").split(".");
+    return (c[0] === "vp9" && c[1] === "2") || (c[0] === "vp09" && c[1] === "02") || (c[0] === "av01" && (c[7] === "16" || c[7] === "18"));
+  };
+  // H.264 plays everywhere; AV1 and VP9 fill in the resolutions above 1080p.
+  const RANK = { avc1: 3, av01: 2, vp9: 1 };
+  const usableVideo = (f) => {
+    const c = codecOf(f);
+    return f.mimeType.startsWith("video/mp4") ? c === "avc1" || c === "av01" : f.mimeType.startsWith("video/webm") && c === "vp9";
+  };
 
   function parse(videoId, r) {
     const ps = r.playabilityStatus || {};
@@ -63,21 +74,20 @@ const YT = (() => {
     const d = r.videoDetails || {};
     if (d.isLive || d.isLiveContent && !Number(d.lengthSeconds)) throw new Error("Прямые трансляции не поддерживаются");
     const all = (r.streamingData && r.streamingData.adaptiveFormats) || [];
-    const mp4 = all.filter((f) => f.url && f.contentLength && f.indexRange && f.mimeType.includes("mp4"));
+    const usable = all.filter((f) => f.url && f.contentLength && f.indexRange && !isHdr(f));
 
-    const audios = mp4.filter((f) => f.mimeType.startsWith("audio/") && !f.isDrc);
+    const audios = usable.filter((f) => f.mimeType.startsWith("audio/mp4") && !f.isDrc);
     const defAudio = audios.filter((f) => !f.audioTrack || f.audioTrack.audioIsDefault);
     const audio = (defAudio.length ? defAudio : audios).sort((a, b) => b.bitrate - a.bitrate)[0];
 
-    // One option per resolution: H.264 plays everywhere; AV1 only when there's no H.264.
+    // One option per resolution, in the best-supported codec available for it.
     const byHeight = new Map();
-    for (const f of mp4) {
-      if (!f.mimeType.startsWith("video/")) continue;
+    for (const f of usable) {
+      if (!usableVideo(f)) continue;
       const codec = codecOf(f);
-      if (codec !== "avc1" && codec !== "av01") continue;
       const prev = byHeight.get(f.height);
       const better = !prev ||
-        (codecOf(prev) !== "avc1" && codec === "avc1") ||
+        RANK[codec] > RANK[codecOf(prev)] ||
         (codecOf(prev) === codec && (f.fps > prev.fps || (f.fps === prev.fps && f.bitrate > prev.bitrate)));
       if (better) byHeight.set(f.height, f);
     }
@@ -98,7 +108,7 @@ const YT = (() => {
         ...videos.map((v) => ({
           key: String(v.itag),
           label: label(v),
-          note: codecOf(v) === "av01" ? "AV1" : v.fps > 30 ? `${v.fps} fps` : "",
+          note: codecOf(v) === "av01" ? "AV1" : codecOf(v) === "vp9" ? "VP9" : v.fps > 30 ? `${v.fps} fps` : "",
           size: Number(v.contentLength) + Number(audio.contentLength),
           hd: v.height >= 720,
         })),

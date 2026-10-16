@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Сохрани видео",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Скачивание видео с YouTube до 4K со звуком, отрывков, кадров и обложек. Работает без сторонних программ.",
   "browser_specific_settings": {
     "gecko": {
@@ -20,7 +20,7 @@
     "*://*.googlevideo.com/*",
     "*://i.ytimg.com/*"
   ],
-  "background": { "scripts": ["lib/mp4.js", "lib/youtube.js", "background.js"] },
+  "background": { "scripts": ["lib/mp4.js", "lib/webm.js", "lib/youtube.js", "background.js"] },
   "browser_action": {
     "default_title": "Сохрани видео",
     "default_icon": "icons/icon.svg",

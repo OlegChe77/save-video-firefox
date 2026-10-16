@@ -31,7 +31,7 @@
 - **Frame.** Saves the current frame as a full-resolution PNG.
 - **Thumbnail.** Saves the video cover in maximum quality.
 - **Fast.** Downloads in 6 parallel streams.
-- **No quality loss.** Video and audio are merged into a regular MP4 without re-encoding: H.264 up to 1080p, AV1 above that. Audio only is saved as M4A.
+- **No quality loss.** Video and audio are merged into a regular MP4 without re-encoding: H.264 up to 1080p, AV1 or VP9 above that. Audio only is saved as M4A.
 - **Nothing extra.** No programs to install, no data collected; the extension talks only to YouTube's servers.
 
 Files are saved to `Downloads/YouTube`. The popup settings have an option to ask where to save each file.

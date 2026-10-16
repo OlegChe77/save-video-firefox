@@ -2,6 +2,7 @@
 
 const CHUNK = 8 * 1024 * 1024; // YouTube serves ranges of up to ~10 MB at full speed
 const THREADS = 6;
+const SMALL = 50 * 1024 * 1024; // downloads up to this size stay in memory
 const jobs = new Map();
 const ui = new Set(); // connected popup / content-script ports
 let nextJobId = 1;
@@ -56,23 +57,36 @@ class HttpError extends Error {
   }
 }
 
-async function fetchInto(job, stream, from, to, dest, destOffset) {
+// Downloads one byte range as a Blob. Big downloads go through Response.blob(),
+// which Firefox keeps in a temporary file, so even a long 4K video doesn't have
+// to fit in RAM. Small ones are read piece by piece for a smooth progress ring.
+async function fetchBlob(job, stream, from, to) {
+  const want = to - from + 1;
   for (let attempt = 0; ; attempt++) {
     let got = 0;
     try {
       const res = await fetch(`${stream.url}&range=${from}-${to}`, { credentials: "omit", signal: job.controller.signal });
       if (!res.ok) throw new HttpError(res.status);
-      const reader = res.body.getReader();
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (got + value.length > to - from + 1) throw new Error("Лишние данные");
-        dest.set(value, destOffset + got);
-        got += value.length;
-        progress(job, value.length);
+      let blob;
+      if (job.total > SMALL) {
+        blob = await res.blob();
+        got = blob.size;
+        progress(job, got);
+      } else {
+        const parts = [];
+        const reader = res.body.getReader();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          parts.push(value);
+          got += value.length;
+          progress(job, value.length);
+        }
+        blob = new Blob(parts);
       }
-      if (got !== to - from + 1) throw new Error("Обрыв соединения");
-      return;
+      if (got > want) throw new Error("Лишние данные");
+      if (got !== want) throw new Error("Обрыв соединения");
+      return blob;
     } catch (e) {
       progress(job, -got);
       if (job.controller.signal.aborted) throw e;
@@ -119,12 +133,15 @@ async function runPool(tasks) {
   await Promise.all(Array.from({ length: Math.min(THREADS, tasks.length) }, worker));
 }
 
-function chunkTasks(job, stream, from, to, dest, destOffset) {
+// Each task fills its own slot in stream.parts, so the parts stay in file order.
+function chunkTasks(job, stream, from, to) {
   const tasks = [];
   for (let p = from; p <= to; p += CHUNK) {
     const end = Math.min(p + CHUNK - 1, to);
-    const off = destOffset + (p - from);
-    tasks.push(() => fetchInto(job, stream, p, end, dest, off));
+    const i = stream.parts.push(null) - 1;
+    tasks.push(async () => {
+      stream.parts[i] = await fetchBlob(job, stream, p, end);
+    });
   }
   return tasks;
 }
@@ -132,25 +149,22 @@ function chunkTasks(job, stream, from, to, dest, destOffset) {
 // Plans what to download for one stream: whole file, or init + segments of the clip.
 async function plan(job, stream) {
   const clen = Number(stream.format.contentLength);
-  if (!job.clip) {
-    stream.buffer = new Uint8Array(clen);
-    return chunkTasks(job, stream, 0, clen - 1, stream.buffer, 0);
-  }
+  stream.parts = [];
+  if (!job.clip) return chunkTasks(job, stream, 0, clen - 1);
   const idxEnd = Number(stream.format.indexRange.end);
   const idxStart = Number(stream.format.indexRange.start);
-  const head = new Uint8Array(idxEnd + 1);
-  await fetchInto(job, stream, 0, idxEnd, head, 0);
-  const segs = MP4.parseSidx(head.subarray(idxStart), idxStart);
+  const head = new Uint8Array(await (await fetchBlob(job, stream, 0, idxEnd)).arrayBuffer());
+  const segs = stream.webm ? WebM.parseCues(head, idxStart) : MP4.parseSidx(head.subarray(idxStart), idxStart);
+  if (!segs) throw new Error("Не удалось прочитать индекс видео");
   const need = segs.filter((s) => s.time + s.duration > job.clip.from && s.time < job.clip.to);
   if (!need.length) throw new Error("Отрывок вне видео");
   const lo = need[0].start;
-  const hi = need[need.length - 1].end;
+  const hi = Math.min(need[need.length - 1].end, clen - 1);
   const initLen = Number(stream.format.initRange.end) + 1;
-  stream.buffer = new Uint8Array(initLen + hi - lo + 1);
-  stream.buffer.set(head.subarray(0, initLen));
+  stream.parts.push(head.slice(0, initLen));
   job.total += hi - lo + 1;
   broadcast();
-  return chunkTasks(job, stream, lo, hi, stream.buffer, initLen);
+  return chunkTasks(job, stream, lo, hi);
 }
 
 function pickVideo(info, key) {
@@ -204,7 +218,7 @@ async function startJob({ videoId, key, clip }) {
     job.label = video ? info.options.find((o) => o.key === String(video.itag)).label : "M4A";
     if (job.clip) job.clip.to = Math.min(job.clip.to, info.duration || job.clip.to);
     job.streams = [
-      ...(video ? [{ kind: "video", itag: video.itag, format: video, url: video.url }] : []),
+      ...(video ? [{ kind: "video", itag: video.itag, format: video, url: video.url, webm: video.mimeType.startsWith("video/webm") }] : []),
       { kind: "audio", itag: info.audio.itag, format: info.audio, url: info.audio.url },
     ];
     if (!job.clip) job.total = job.streams.reduce((a, s) => a + Number(s.format.contentLength), 0);
@@ -218,11 +232,10 @@ async function startJob({ videoId, key, clip }) {
 
     job.phase = "mux";
     broadcast(true);
-    await new Promise((r) => setTimeout(r, 0));
-    const tracks = job.streams.map((s) => MP4.parseTrack(s.buffer));
+    const tracks = await Promise.all(job.streams.map((s) => (s.webm ? WebM : MP4).readTrack(new Blob(s.parts))));
     if (job.clip) for (const t of tracks) MP4.trim(t, job.clip.from, job.clip.to);
     const blob = new Blob(MP4.build(tracks), { type: job.audioOnly ? "audio/mp4" : "video/mp4" });
-    for (const s of job.streams) s.buffer = null;
+    for (const s of job.streams) s.parts = null;
 
     job.phase = "save";
     job.size = blob.size;
@@ -245,7 +258,7 @@ async function startJob({ videoId, key, clip }) {
     job.status = "error";
     job.error = e.name === "TypeError" ? "Нет соединения с YouTube" : e.message;
   } finally {
-    if (job.streams) for (const s of job.streams) s.buffer = null;
+    if (job.streams) for (const s of job.streams) s.parts = null;
     broadcast(true);
   }
 }
